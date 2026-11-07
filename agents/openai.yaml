@@ -1,0 +1,8 @@
+interface:
+  display_name: "Adaptive Model Research"
+  short_description: "Visible, self-repairing model research and training"
+  brand_color: "#176B5B"
+  default_prompt: "Use $adaptive-model-research to run this model-training study as a visible, self-repairing, auditable research loop."
+
+policy:
+  allow_implicit_invocation: true
