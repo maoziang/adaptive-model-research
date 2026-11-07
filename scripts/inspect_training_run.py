@@ -107,6 +107,18 @@ def newest_age_minutes(paths: list[Path]) -> Optional[float]:
     return round(max(0.0, datetime.now(timezone.utc).timestamp() - newest) / 60.0, 2)
 
 
+def parse_started_at(value: Optional[str]) -> Optional[float]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
@@ -114,6 +126,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log", type=Path)
     parser.add_argument("--stale-minutes", type=float, default=75.0)
     parser.add_argument("--startup-grace-minutes", type=float, default=10.0)
+    parser.add_argument("--started-at", help="ISO-8601 process start time; overrides directory mtime fallback.")
     parser.add_argument("--tail-bytes", type=int, default=131_072)
     parser.add_argument("--completion-files", default="final-summary.json")
     parser.add_argument("--accelerator-status-file", type=Path)
@@ -147,19 +160,31 @@ def main() -> int:
     state_terminal_reason = state.get("terminal_reason")
     progress_artifacts = result_paths + checkpoint_paths + spec_paths + summary_paths
     age_minutes = newest_age_minutes(progress_artifacts)
-    run_age_minutes = round(max(0.0, datetime.now(timezone.utc).timestamp() - run_dir.stat().st_mtime) / 60.0, 2)
+    now_timestamp = datetime.now(timezone.utc).timestamp()
+    started_timestamp = parse_started_at(args.started_at) or parse_started_at(state.get("started_at"))
+    startup_time_source = "argument_or_state" if started_timestamp is not None else "run_directory_mtime_fallback"
+    run_age_minutes = round(max(0.0, now_timestamp - (started_timestamp or run_dir.stat().st_mtime)) / 60.0, 2)
     alive = process_alive(args.pid)
     signals = log_signals(args.log, max(1024, args.tail_bytes))
 
     accelerator_status: Any = None
-    if args.accelerator_status_file and args.accelerator_status_file.is_file():
+    accelerator_status_age_seconds: Optional[float] = None
+    if args.accelerator_status_file:
         try:
-            accelerator_status = json.loads(args.accelerator_status_file.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
-            accelerator_status = args.accelerator_status_file.read_text(encoding="utf-8", errors="replace").strip()[:512]
+            raw_accelerator_status = args.accelerator_status_file.read_text(encoding="utf-8")
+            accelerator_status_age_seconds = round(max(0.0, now_timestamp - args.accelerator_status_file.stat().st_mtime), 2)
+        except OSError as error:
+            accelerator_status = {"state": "unavailable", "error": type(error).__name__}
+        else:
+            try:
+                accelerator_status = json.loads(raw_accelerator_status)
+            except json.JSONDecodeError:
+                accelerator_status = raw_accelerator_status.strip()[:512]
 
     if invalid_json or nonfinite_json:
         status, action = "invalid", "inspect_corrupt_or_nonfinite_artifacts"
+    elif completion_present and (not completion_declared or not fingerprint_matches):
+        status, action = "attention", "verify_completion_state_reason_and_fingerprint"
     elif state_status == "batch_complete":
         status, action = "batch_complete", "run_level_3_audit_then_choose_next_research_round"
     elif completion_declared and state_status == "complete" and state_terminal_reason and fingerprint_matches:
@@ -185,6 +210,8 @@ def main() -> int:
         "recommended_action": action,
         "process_alive": alive,
         "accelerator_status": accelerator_status,
+        "accelerator_status_age_seconds": accelerator_status_age_seconds,
+        "startup_time_source": startup_time_source,
         "phase": state.get("phase"),
         "current_candidate": state.get("current_candidate"),
         "progress": {"completed": state.get("completed_candidates", len(result_paths)), "planned": state.get("planned_candidates")},

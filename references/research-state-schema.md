@@ -13,6 +13,7 @@ Minimum shape:
   "status": "running",
   "contract_fingerprint": "sha256:...",
   "run_directory": "...",
+  "started_at": "ISO-8601",
   "current_round": 2,
   "current_candidate": "model-medium-seed0",
   "planned_candidates": 20,

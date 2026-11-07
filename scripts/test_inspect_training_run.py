@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -82,6 +83,27 @@ class TrainingRunInspectorTests(unittest.TestCase):
         (self.run_dir / "research-state.json").write_text(json.dumps({"status": "running", "last_heartbeat_at": "now"}), encoding="utf-8")
         _, payload = self.inspect("--pid", str(os.getpid()), "--stale-minutes", "60")
         self.assertEqual(payload["status"], "stalled")
+
+    def test_explicit_start_time_prevents_old_directory_false_stall(self) -> None:
+        old = self.run_dir.stat().st_mtime - 7200
+        os.utime(self.run_dir, (old, old))
+        started_at = datetime.now(timezone.utc).isoformat()
+        _, payload = self.inspect("--pid", str(os.getpid()), "--started-at", started_at)
+        self.assertEqual(payload["status"], "running")
+        self.assertEqual(payload["startup_time_source"], "argument_or_state")
+
+    def test_accelerator_status_reports_freshness(self) -> None:
+        status_file = self.run_dir / "accelerator.json"
+        status_file.write_text('{"gpu_utilization":42}', encoding="utf-8")
+        _, payload = self.inspect("--pid", str(os.getpid()), "--accelerator-status-file", str(status_file))
+        self.assertEqual(payload["accelerator_status"], {"gpu_utilization": 42})
+        self.assertIsNotNone(payload["accelerator_status_age_seconds"])
+
+    def test_batch_complete_with_wrong_fingerprint_requests_attention(self) -> None:
+        (self.run_dir / "research-state.json").write_text(json.dumps({"status": "batch_complete", "contract_fingerprint": "sha256:new"}), encoding="utf-8")
+        (self.run_dir / "final-summary.json").write_text(json.dumps({"complete": True, "contract_fingerprint": "sha256:old"}), encoding="utf-8")
+        _, payload = self.inspect()
+        self.assertEqual(payload["status"], "attention")
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ Use the product’s attached-session wait or poll mechanism. Never busy-loop and
 Run the included inspector when the run layout is compatible:
 
 ```powershell
-python scripts/inspect_training_run.py --run-dir <run> --pid <pid> --log <log> --accelerator-status-file <optional-json>
+python scripts/inspect_training_run.py --run-dir <run> --pid <pid> --started-at <ISO-8601> --log <log> --accelerator-status-file <optional-json>
 ```
 
 Each visible heartbeat should fit in a few lines and state:
@@ -55,3 +55,5 @@ Do not reread full logs while status is healthy. Use four evidence levels:
 The process ending is not the same as the work finishing. The main chat must perform acceptance and proactively deliver the final report.
 
 The inspector treats `research-state.json` as orchestration state, not training progress. Updating a heartbeat therefore cannot hide stale results or checkpoints. Final `complete` requires a matching contract fingerprint, an explicit terminal reason, and a completion artifact whose `complete` field is true; `batch_complete` remains a separate state.
+
+Provide `--started-at` or persist `started_at` in `research-state.json` when reusing an old run directory; directory modification time is only a compatibility fallback. Accelerator status is optional and includes its age so a stale GPU snapshot cannot be presented as current health.
