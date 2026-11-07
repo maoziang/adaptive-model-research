@@ -25,12 +25,29 @@ class TrainingRunInspectorTests(unittest.TestCase):
         return completed.returncode, json.loads(completed.stdout)
 
     def test_complete_run_requires_main_chat_acceptance(self) -> None:
+        fingerprint = "sha256:contract"
+        (self.run_dir / "research-state.json").write_text(json.dumps({"status": "complete", "terminal_reason": "frozen test and report complete", "contract_fingerprint": fingerprint}), encoding="utf-8")
         (self.run_dir / "results" / "candidate.json").write_text('{"metric":1.0}', encoding="utf-8")
-        (self.run_dir / "final-summary.json").write_text('{"complete":true}', encoding="utf-8")
+        (self.run_dir / "final-summary.json").write_text(json.dumps({"complete": True, "contract_fingerprint": fingerprint}), encoding="utf-8")
         code, payload = self.inspect()
         self.assertEqual(code, 0)
         self.assertEqual(payload["status"], "complete")
         self.assertIn("main_chat", str(payload["recommended_action"]))
+
+    def test_false_summary_is_not_complete(self) -> None:
+        fingerprint = "sha256:contract"
+        (self.run_dir / "research-state.json").write_text(json.dumps({"status": "complete", "terminal_reason": "done", "contract_fingerprint": fingerprint}), encoding="utf-8")
+        (self.run_dir / "final-summary.json").write_text(json.dumps({"complete": False, "contract_fingerprint": fingerprint}), encoding="utf-8")
+        _, payload = self.inspect()
+        self.assertEqual(payload["status"], "attention")
+
+    def test_batch_complete_is_not_final_complete(self) -> None:
+        fingerprint = "sha256:contract"
+        (self.run_dir / "research-state.json").write_text(json.dumps({"status": "batch_complete", "contract_fingerprint": fingerprint}), encoding="utf-8")
+        (self.run_dir / "final-summary.json").write_text(json.dumps({"complete": True, "contract_fingerprint": fingerprint}), encoding="utf-8")
+        _, payload = self.inspect()
+        self.assertEqual(payload["status"], "batch_complete")
+        self.assertIn("next_research_round", str(payload["recommended_action"]))
 
     def test_state_is_exposed_in_compact_heartbeat(self) -> None:
         (self.run_dir / "research-state.json").write_text(json.dumps({"phase": "screen", "current_candidate": "tcn-medium", "completed_candidates": 3, "planned_candidates": 9}), encoding="utf-8")
@@ -51,6 +68,20 @@ class TrainingRunInspectorTests(unittest.TestCase):
         _, payload = self.inspect("--pid", str(os.getpid()), "--log", str(log))
         self.assertEqual(payload["status"], "attention")
         self.assertEqual(payload["fatal_signals"], ["traceback", "accelerator_oom"])
+
+    def test_live_process_without_artifacts_stalls_after_grace(self) -> None:
+        _, payload = self.inspect("--pid", str(os.getpid()), "--startup-grace-minutes", "-1")
+        self.assertEqual(payload["status"], "stalled")
+        self.assertIn("no_progress_artifact", str(payload["recommended_action"]))
+
+    def test_state_heartbeat_does_not_hide_stale_training_artifact(self) -> None:
+        result = self.run_dir / "results" / "old.json"
+        result.write_text('{"metric":1.0}', encoding="utf-8")
+        old = result.stat().st_mtime - 7200
+        os.utime(result, (old, old))
+        (self.run_dir / "research-state.json").write_text(json.dumps({"status": "running", "last_heartbeat_at": "now"}), encoding="utf-8")
+        _, payload = self.inspect("--pid", str(os.getpid()), "--stale-minutes", "60")
+        self.assertEqual(payload["status"], "stalled")
 
 
 if __name__ == "__main__":

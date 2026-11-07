@@ -78,6 +78,18 @@ def read_state(path: Path) -> tuple[dict[str, Any], Optional[str]]:
     return payload, None
 
 
+def read_json_object(path: Path) -> tuple[dict[str, Any], Optional[str]]:
+    if not path.is_file():
+        return {}, "missing"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}, "invalid"
+    if not isinstance(payload, dict):
+        return {}, "invalid"
+    return payload, None
+
+
 def log_signals(path: Optional[Path], tail_bytes: int) -> list[str]:
     if path is None or not path.is_file():
         return []
@@ -101,8 +113,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pid", type=int)
     parser.add_argument("--log", type=Path)
     parser.add_argument("--stale-minutes", type=float, default=75.0)
+    parser.add_argument("--startup-grace-minutes", type=float, default=10.0)
     parser.add_argument("--tail-bytes", type=int, default=131_072)
     parser.add_argument("--completion-files", default="final-summary.json")
+    parser.add_argument("--accelerator-status-file", type=Path)
     return parser.parse_args()
 
 
@@ -123,20 +137,41 @@ def main() -> int:
     if state_error:
         invalid_json.append(state_path.name)
     completion_files = [run_dir / item.strip() for item in args.completion_files.split(",") if item.strip()]
-    completion_present = all(path.is_file() for path in completion_files)
-    artifacts = result_paths + checkpoint_paths + spec_paths + summary_paths + ([state_path] if state_path.is_file() else [])
-    age_minutes = newest_age_minutes(artifacts)
+    completion_payloads = [read_json_object(path) for path in completion_files]
+    completion_present = all(error is None for _, error in completion_payloads)
+    completion_declared = completion_present and all(payload.get("complete") is True for payload, _ in completion_payloads)
+    fingerprints = {payload.get("contract_fingerprint") for payload, _ in completion_payloads}
+    state_fingerprint = state.get("contract_fingerprint")
+    fingerprint_matches = bool(state_fingerprint) and fingerprints == {state_fingerprint}
+    state_status = state.get("status")
+    state_terminal_reason = state.get("terminal_reason")
+    progress_artifacts = result_paths + checkpoint_paths + spec_paths + summary_paths
+    age_minutes = newest_age_minutes(progress_artifacts)
+    run_age_minutes = round(max(0.0, datetime.now(timezone.utc).timestamp() - run_dir.stat().st_mtime) / 60.0, 2)
     alive = process_alive(args.pid)
     signals = log_signals(args.log, max(1024, args.tail_bytes))
 
+    accelerator_status: Any = None
+    if args.accelerator_status_file and args.accelerator_status_file.is_file():
+        try:
+            accelerator_status = json.loads(args.accelerator_status_file.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            accelerator_status = args.accelerator_status_file.read_text(encoding="utf-8", errors="replace").strip()[:512]
+
     if invalid_json or nonfinite_json:
         status, action = "invalid", "inspect_corrupt_or_nonfinite_artifacts"
-    elif completion_present:
+    elif state_status == "batch_complete":
+        status, action = "batch_complete", "run_level_3_audit_then_choose_next_research_round"
+    elif completion_declared and state_status == "complete" and state_terminal_reason and fingerprint_matches:
         status, action = "complete", "run_full_acceptance_and_report_in_main_chat"
+    elif completion_present:
+        status, action = "attention", "verify_completion_state_reason_and_fingerprint"
     elif signals:
         status, action = "attention", "read_log_tail_and_latest_candidate"
     elif alive is False:
         status, action = "stopped", "inspect_last_atomic_artifact_then_resume"
+    elif alive is True and age_minutes is None and run_age_minutes > args.startup_grace_minutes:
+        status, action = "stalled", "no_progress_artifact_after_startup_grace"
     elif alive is True and age_minutes is not None and age_minutes > args.stale_minutes:
         status, action = "stalled", "check_accelerator_child_process_and_latest_candidate"
     elif alive is True:
@@ -149,12 +184,15 @@ def main() -> int:
         "status": status,
         "recommended_action": action,
         "process_alive": alive,
+        "accelerator_status": accelerator_status,
         "phase": state.get("phase"),
         "current_candidate": state.get("current_candidate"),
         "progress": {"completed": state.get("completed_candidates", len(result_paths)), "planned": state.get("planned_candidates")},
         "newest_artifact_age_minutes": age_minutes,
         "counts": {"results": len(result_paths), "checkpoints": len(checkpoint_paths), "specs": len(spec_paths), "summaries": len(summary_paths)},
         "completion_present": completion_present,
+        "completion_declared": completion_declared,
+        "completion_fingerprint_matches": fingerprint_matches,
         "invalid_json": invalid_json,
         "nonfinite_json": nonfinite_json,
         "fatal_signals": signals,
