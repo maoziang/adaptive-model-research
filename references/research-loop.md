@@ -8,7 +8,25 @@ Use these phases: `contract → validate → benchmark → screen → confirm �
 
 Persist every transition in `research-state.json`. A batch process returning exit code zero maps to `batch_complete`, not automatically to `complete`.
 
-## One round
+## Outcome-led scope
+
+Treat the candidate registry as a library of possible experiments, not a mandatory
+execution queue. When the user prioritizes improving one model, keep that family
+as the research subject and run only the controls needed to decide the current
+hypotheses. Do not silently expand a focused iteration into a full benchmark suite.
+
+Start with an incumbent and 1-3 falsifiable treatments. After their paired development
+results, choose the next action: keep, repair, combine proven components, expand
+capacity, or reject the hypothesis. Do not prefill many speculative batches just to
+reach a trial count. Multi-fold and multi-seed confirmation belongs to plausible
+finalists; a small initial screen does not establish full seasonal robustness.
+
+Distinguish code readiness, batch completion, research convergence and demonstrated
+task success. If the user asks to continue until their model leads, pursue useful
+evidence-led improvements without promising guaranteed superiority or using test
+results to tune. A resource checkpoint is not proof that the objective was achieved.
+
+## Round procedure
 
 1. Diagnose the current Pareto frontier and the largest reproducible weakness.
 2. Generate 1–3 falsifiable hypotheses, each with a mechanism, smallest useful treatment, control and expected metric signature.
@@ -19,6 +37,22 @@ Persist every transition in `research-state.json`. A batch process returning exi
 7. Decide whether evidence justifies scale-up, multi-seed confirmation, another round or termination.
 
 Do not stack many changes at once. When a combined model improves, run enough ablations to identify what caused the gain.
+
+## Avoid tuning the screen instead of the model
+
+After two or more null or marginal treatment rounds on the same small set of
+development slices, prefer expanding the incumbent-versus-finalist comparison to
+the remaining declared slices before inventing another module. This is a decision
+heuristic, not a mandatory trial quota. Diagnose which targets, horizons and periods
+actually need work; do not repeatedly optimize two convenient periods and call the
+result multi-season robustness. Newly consulted development slices stay development
+data, never become an untouched final test by renaming them.
+
+Changes to a shared model factory require a default-behavior regression check before
+using old trials as controls. Preserve old code/data/contract hashes; record why the
+changed implementation is comparable. Reuse intact completed evidence only with its
+original provenance, never by relabeling fingerprints or copying metrics into a new
+trial as if it had run. Keep the training snapshot fixed within an active round.
 
 ## Advancement rule
 

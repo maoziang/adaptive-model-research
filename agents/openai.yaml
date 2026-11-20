@@ -1,8 +1,8 @@
 interface:
-  display_name: "Adaptive Model Research"
-  short_description: "Visible, self-repairing model research and training"
+  display_name: "自适应模型研究"
+  short_description: "主会话可视训练、证据驱动迭代、故障恢复与可审计的研究验收"
   brand_color: "#176B5B"
-  default_prompt: "Use $adaptive-model-research to run this model-training study as a visible, self-repairing, auditable research loop."
+  default_prompt: "使用 $adaptive-model-research 开展本次模型研究，在当前主会话监控训练，按证据迭代，支持有界恢复与断点续跑，并交付可复核的实验报告。"
 
 policy:
   allow_implicit_invocation: true

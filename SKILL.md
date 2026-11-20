@@ -1,6 +1,6 @@
 ---
 name: adaptive-model-research
-description: Run rigorous, visible, self-repairing, continuously evolving model-training research. Use for dataset replacement, architecture/capacity/recipe comparison, long GPU training, current-main-chat monitoring, failure recovery, experiment resumption, model selection, or final research reporting across forecasting, classification, regression, vision, language, and multimodal tasks; do not use for ordinary application development or one-off inference.
+description: 面向预测、分类、回归、视觉、语言及多模态任务开展可审计的模型训练研究。适用于数据集迁移、架构与容量比较、训练配方优化、主会话长训练监控、故障恢复、断点续跑、模型选型与研究报告。普通应用开发和单次推理无需启用。
 ---
 
 # Adaptive Model Research
@@ -37,6 +37,7 @@ description: Run rigorous, visible, self-repairing, continuously evolving model-
 3. 只按开发验证证据晋级；先单种子筛选，再多种子复验；冻结后才运行最终测试。
 4. 每批完成先做全面验收，再提出 1–3 个可证伪假设。持续研究中 `batch_complete` 只是检查点，不代表结束。
 5. 迭代不得只围绕换架构或加参数；优先选择能解释当前短板的最小改动，并用消融确认因果。
+   候选清单是实验备选库，不是必须跑完的任务。用户指定主模型时，优先用原模型与1—3个有依据的改动形成小批次，依据结果再决定后续实验。
 6. 机器负责逐 epoch 记录、早停和硬异常检测；模型仅在心跳、候选完成、异常修复、研究决策和最终验收时深入分析。
 7. 最终分别给出主指标冠军、关键子任务冠军、效率拐点、稳健候选和生产候选，不用单一总分掩盖取舍。
 

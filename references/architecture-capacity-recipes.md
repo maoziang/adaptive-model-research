@@ -2,6 +2,11 @@
 
 ## Build a factorial matrix
 
+A matrix defines possible controls and hypotheses; it does not require training
+every cell. For focused improvement, execute a small informative subset first and
+expand only when its results justify the extra computation. Preserve user-selected
+capacity priorities while making architecture/recipe changes separately auditable.
+
 Separate three questions:
 
 1. Which inductive bias or architecture helps?
@@ -17,6 +22,12 @@ Choose capacity points from data size, effective independent samples, input/targ
 If the larger model loses, diagnose under-training, optimization instability, regularization, context design, data diversity and noise before concluding that capacity is harmful. If it wins, still locate the next boundary; do not extrapolate indefinitely.
 
 ## Screening and confirmation
+
+Timing correctness checks is not a reliable throughput benchmark: per-parameter
+gradient checks can add device synchronization. Estimate duration from the actual
+training path after warmup and report convergence assumptions separately. Distinguish
+one model fit, one research batch, and a full fold/seed campaign; never multiply a
+large speculative registry into a purported required completion time.
 
 - Smoke test every family on a small deterministic slice to catch code errors, not to rank models.
 - Screen candidates under a common development budget and one fixed seed.
